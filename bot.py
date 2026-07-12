@@ -122,14 +122,8 @@ async def budget(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     budget_value = query.data.replace("budget_", "")
 
-    # Фильтр: клиент с бюджетом ниже $500 нам не подходит
     if budget_value == "low":
-        await query.edit_message_text(
-            "⚠️ К сожалению, этот клиент не подходит под наш формат работы.\n\n"
-            "Highlight Media работает с бюджетами от $500/мес.\n\n"
-            "Если у клиента изменится бюджет — возвращайтесь, будем рады помочь! 🙌"
-        )
-        return ConversationHandler.END
+        budget_value = "Не определён"
 
     context.user_data["budget"] = budget_value
     await query.edit_message_text(
@@ -262,27 +256,29 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
+    private = filters.ChatType.PRIVATE
+
     conv_handler = ConversationHandler(
         entry_points=[
-            CommandHandler("start", start),
+            CommandHandler("start", start, filters=private),
             CallbackQueryHandler(new_client_button, pattern="^new_client_"),
         ],
         states={
-            COMPANY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, company_name)],
-            NICHE: [MessageHandler(filters.TEXT & ~filters.COMMAND, niche)],
-            WEBSITE: [MessageHandler(filters.TEXT & ~filters.COMMAND, website)],
+            COMPANY_NAME: [MessageHandler(private & filters.TEXT & ~filters.COMMAND, company_name)],
+            NICHE: [MessageHandler(private & filters.TEXT & ~filters.COMMAND, niche)],
+            WEBSITE: [MessageHandler(private & filters.TEXT & ~filters.COMMAND, website)],
             TASK: [CallbackQueryHandler(task, pattern="^task_")],
             BUDGET: [CallbackQueryHandler(budget, pattern="^budget_")],
-            CONTACT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, contact_name)],
-            CONTACT_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, contact_phone)],
-            COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, comment)],
+            CONTACT_NAME: [MessageHandler(private & filters.TEXT & ~filters.COMMAND, contact_name)],
+            CONTACT_PHONE: [MessageHandler(private & filters.TEXT & ~filters.COMMAND, contact_phone)],
+            COMMENT: [MessageHandler(private & filters.TEXT & ~filters.COMMAND, comment)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     app.add_handler(conv_handler)
-    app.add_handler(CommandHandler("menu", menu))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
+    app.add_handler(CommandHandler("menu", menu, filters=private))
+    app.add_handler(MessageHandler(private & filters.TEXT & ~filters.COMMAND, menu))
     app.run_polling()
 
 
