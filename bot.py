@@ -178,6 +178,9 @@ async def comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💬 *Комментарий:* {data.get('comment')}"
     )
 
+    # Сохраняем partner_id до очистки
+    saved_partner_id = partner_id
+
     # Отправляем в Telegram группу Highlight Media
     await context.bot.send_message(
         chat_id=MANAGER_CHAT_ID,
@@ -185,7 +188,13 @@ async def comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-    # Автоответ партнёру
+    # Автоответ партнёру с кнопкой добавить нового клиента
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить нового клиента", callback_data=f"new_client_{saved_partner_id}")]
+    ])
+
+    context.user_data.clear()
+
     await update.message.reply_text(
         f"✅ *Заявка принята!*\n\n"
         f"Компания: *{data.get('company_name')}*\n"
@@ -194,11 +203,54 @@ async def comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Наш менеджер свяжется с клиентом в течение рабочего дня.\n\n"
         f"Спасибо за сотрудничество! 🙌\n"
         f"_Highlight Media_",
+        reply_markup=keyboard,
         parse_mode="Markdown"
     )
 
-    context.user_data.clear()
     return ConversationHandler.END
+
+
+async def new_client_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    partner_id = query.data.replace("new_client_", "")
+
+    if partner_id not in PARTNERS:
+        await query.edit_message_text("❌ Ошибка идентификации партнёра. Обратитесь в Highlight Media.")
+        return ConversationHandler.END
+
+    context.user_data["partner_id"] = partner_id
+    partner_name = get_partner_name(partner_id)
+
+    await query.edit_message_text(
+        f"👋 Добавляем нового клиента\n"
+        f"Студия: *{partner_name}*\n\n"
+        f"Введите *название компании клиента*:",
+        parse_mode="Markdown"
+    )
+    return COMPANY_NAME
+
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    partner_id = get_partner_id(context)
+    if not partner_id or partner_id not in PARTNERS:
+        await update.message.reply_text(
+            "❌ Вы не авторизованы.\n\n"
+            "Используйте персональную ссылку от Highlight Media."
+        )
+        return
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить нового клиента", callback_data=f"new_client_{partner_id}")],
+        [InlineKeyboardButton("📞 Связаться с нами", url="https://t.me/highlight_media")]
+    ])
+    await update.message.reply_text(
+        f"🏢 *Партнёрский портал Highlight Media*\n"
+        f"Студия: *{get_partner_name(partner_id)}*\n\n"
+        f"Выберите действие:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -211,7 +263,10 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            CallbackQueryHandler(new_client_button, pattern="^new_client_"),
+        ],
         states={
             COMPANY_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, company_name)],
             NICHE: [MessageHandler(filters.TEXT & ~filters.COMMAND, niche)],
@@ -226,6 +281,8 @@ def main():
     )
 
     app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("menu", menu))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu))
     app.run_polling()
 
 
